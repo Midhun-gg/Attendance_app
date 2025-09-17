@@ -1,8 +1,8 @@
 import 'package:flutter/material.dart';
 import 'dart:io';
-import 'package:file_picker/file_picker.dart';
 import 'package:image_picker/image_picker.dart';
 import 'package:http/http.dart' as http;
+import '../services/api_service.dart';
 
 class AddStudentPage extends StatefulWidget {
   final int classId;
@@ -34,46 +34,34 @@ class _AddStudentPageState extends State<AddStudentPage> {
     String rollNo = rollNoController.text.trim();
 
     try {
-      var request = http.MultipartRequest(
-        "POST",
-        Uri.parse("http://10.0.2.2:8000/add_student"), // emulator: change if needed
+      var response = await ApiService.addStudent(
+        widget.classId,
+        rollNo,
+        name,
+        selectedImage!,
       );
 
-      request.fields["class_id"] = widget.classId.toString();
-      request.fields["pen"] = rollNo;
-      request.fields["name"] = name;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(response["message"] ?? "✅ Student added successfully"),
+          backgroundColor: Colors.green,
+        ),
+      );
 
-      if (selectedImage != null) {
-        request.files.add(await http.MultipartFile.fromPath(
-          'file',
-          selectedImage!.path,
-        ));
-      }
+      // Clear form
+      nameController.clear();
+      rollNoController.clear();
+      setState(() {
+        selectedImage = null;
+      });
 
-      var response = await request.send();
-      var responseBody = await response.stream.bytesToString();
-
-      if (response.statusCode == 200) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("✅ Student added successfully")),
-        );
-
-        // Clear form
-        nameController.clear();
-        rollNoController.clear();
-        setState(() {
-          selectedImage = null;
-        });
-
-        Navigator.pop(context, true); // return success
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text("❌ Failed: $responseBody")),
-        );
-      }
+      Navigator.pop(context, true); // return success
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("⚠️ Error: ${e.toString()}")),
+        SnackBar(
+          content: Text("⚠️ Error: ${e.toString()}"),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }
@@ -135,23 +123,10 @@ class _AddStudentPageState extends State<AddStudentPage> {
     }
   }
 
-  // Pick from file manager
+  // Pick from file manager (removed file_picker dependency)
   Future<void> _uploadPhoto() async {
-    try {
-      final result = await FilePicker.platform.pickFiles(type: FileType.image);
-      if (result != null && result.files.single.path != null) {
-        setState(() {
-          selectedImage = File(result.files.single.path!);
-        });
-      }
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Error picking file: ${e.toString()}'),
-          backgroundColor: Colors.red,
-        ),
-      );
-    }
+    // For now, we'll use gallery picker as an alternative
+    _pickFromGallery();
   }
 
   Future<void> _showImageSourceDialog() async {

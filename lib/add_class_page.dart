@@ -27,42 +27,33 @@ class _AddClassPageState extends State<AddClassPage> {
 
       try {
         // Call backend API
-        bool success = await ApiService.addClass(
+        var response = await ApiService.addClass(
           int.parse(selectedClass!), 
           selectedSection!,
         );
 
-        if (success) {
-          // Refresh global class list from backend
-          var serverClasses = await ApiService.listClasses();
-          addedClasses = serverClasses
-              .map((c) => SchoolClass(
-                    className: c["class_number"].toString(),
-                    sectionName: c["section"],
-                  ))
-              .toList();
+        // Refresh global class list from backend
+        var serverClasses = await ApiService.listClasses();
+        addedClasses = serverClasses
+            .map((c) => SchoolClass(
+                  className: c["class_number"].toString(),
+                  sectionName: c["section"],
+                ))
+            .toList();
 
-          ScaffoldMessenger.of(context).showSnackBar(
-            SnackBar(
-              content: Text(
-                'Class $selectedClass-$selectedSection added successfully!',
-              ),
-              backgroundColor: Colors.green,
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              response["message"] ?? 'Class $selectedClass-$selectedSection added successfully!',
             ),
-          );
+            backgroundColor: Colors.green,
+          ),
+        );
 
-          setState(() {
-            selectedClass = null;
-            selectedSection = null;
-          });
-        } else {
-          ScaffoldMessenger.of(context).showSnackBar(
-            const SnackBar(
-              content: Text("Failed to add class"),
-              backgroundColor: Colors.red,
-            ),
-          );
-        }
+        setState(() {
+          selectedClass = null;
+          selectedSection = null;
+        });
       } catch (e) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(

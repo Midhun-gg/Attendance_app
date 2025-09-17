@@ -4,6 +4,7 @@ import 'package:http/http.dart' as http;
 import 'dart:convert';
 
 import 'class_management_page.dart';
+import '../services/api_service.dart';
 
 class BrowseClassPage extends StatefulWidget {
   const BrowseClassPage({super.key});
@@ -26,20 +27,18 @@ class _BrowseClassPageState extends State<BrowseClassPage> {
 
   Future<void> _fetchClasses() async {
     try {
-      final response = await http.get(Uri.parse("http://10.0.2.2:8000/list_classes")); // 🔹 Change base URL for device/server
-      if (response.statusCode == 200) {
-        final data = jsonDecode(response.body);
-        setState(() {
-          classes = List<Map<String, dynamic>>.from(data["classes"]);
-          isLoading = false;
-        });
-      } else {
-        throw Exception("Failed to fetch classes");
-      }
+      final serverClasses = await ApiService.listClasses();
+      setState(() {
+        classes = List<Map<String, dynamic>>.from(serverClasses);
+        isLoading = false;
+      });
     } catch (e) {
       setState(() => isLoading = false);
       ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text("⚠️ Error loading classes: ${e.toString()}")),
+        SnackBar(
+          content: Text("⚠️ Error loading classes: ${e.toString()}"),
+          backgroundColor: Colors.red,
+        ),
       );
     }
   }

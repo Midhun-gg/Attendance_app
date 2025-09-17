@@ -1,10 +1,6 @@
 // delete_class_page.dart
 import 'package:flutter/material.dart';
-import 'package:http/http.dart' as http;
-import 'dart:convert';
-
-import '../models/school_class.dart';
-import '../data/global_data.dart'; // contains the addedClasses list
+import '../services/api_service.dart';
 
 class DeleteClassPage extends StatefulWidget {
   const DeleteClassPage({super.key});
@@ -14,65 +10,73 @@ class DeleteClassPage extends StatefulWidget {
 }
 
 class _DeleteClassPageState extends State<DeleteClassPage> {
-  bool isLoading = false;
+  bool isLoading = true;
+  List<Map<String, dynamic>> classes = [];
 
-  Future<void> _deleteClassFromAPI(SchoolClass classSection) async {
-    setState(() {
-      isLoading = true;
-    });
+  @override
+  void initState() {
+    super.initState();
+    _fetchClasses();
+  }
 
+  Future<void> _fetchClasses() async {
     try {
-      final response = await http.delete(
-        Uri.parse("http://127.0.0.1:8000/delete_class"), // adjust for your backend
-        headers: {"Content-Type": "application/json"},
-        body: jsonEncode({
-          "className": classSection.className,
-          "sectionName": classSection.sectionName,
-        }),
+      final serverClasses = await ApiService.listClasses();
+      setState(() {
+        classes = List<Map<String, dynamic>>.from(serverClasses);
+        isLoading = false;
+      });
+    } catch (e) {
+      setState(() => isLoading = false);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Error loading classes: $e'),
+          backgroundColor: Colors.red,
+        ),
+      );
+    }
+  }
+
+  Future<void> _deleteClassFromAPI(Map<String, dynamic> cls) async {
+    setState(() => isLoading = true);
+    try {
+      final response = await ApiService.deleteClass(
+        int.parse(cls["class_number"].toString()),
+        cls["section"].toString(),
       );
 
-      if (response.statusCode == 200) {
-        // ✅ Success: Remove locally too
-        setState(() {
-          addedClasses.removeWhere((c) =>
-              c.className == classSection.className &&
-              c.sectionName == classSection.sectionName);
-        });
-
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Class ${classSection.className} - Section ${classSection.sectionName} deleted successfully!'),
-            backgroundColor: Colors.red,
-            action: SnackBarAction(
-              label: 'UNDO',
-              textColor: Colors.white,
-              onPressed: () async {
-                // optional undo -> call add_class endpoint
-                setState(() {
-                  addedClasses.add(classSection);
-                });
-                await http.post(
-                  Uri.parse("http://127.0.0.1:8000/add_class"),
-                  headers: {"Content-Type": "application/json"},
-                  body: jsonEncode({
-                    "className": classSection.className,
-                    "sectionName": classSection.sectionName,
-                  }),
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(response["message"] ?? 'Class deleted successfully!'),
+          backgroundColor: Colors.red,
+          action: SnackBarAction(
+            label: 'UNDO',
+            textColor: Colors.white,
+            onPressed: () async {
+              try {
+                await ApiService.addClass(
+                  int.parse(cls["class_number"].toString()),
+                  cls["section"].toString(),
                 );
-              },
-            ),
+                await _fetchClasses();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Class restored successfully!'),
+                    backgroundColor: Colors.green,
+                  ),
+                );
+              } catch (e) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(
+                    content: Text('Failed to restore class: $e'),
+                    backgroundColor: Colors.red,
+                  ),
+                );
+              }
+            },
           ),
-        );
-      } else {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text(
-                'Failed to delete class. Server responded: ${response.body}'),
-            backgroundColor: Colors.orange,
-          ),
-        );
-      }
+        ),
+      );
     } catch (e) {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -81,20 +85,12 @@ class _DeleteClassPageState extends State<DeleteClassPage> {
         ),
       );
     } finally {
-      setState(() {
-        isLoading = false;
-      });
+      await _fetchClasses();
     }
   }
 
   @override
   Widget build(BuildContext context) {
-    List<SchoolClass> classSections = List.from(addedClasses)
-      ..sort((a, b) {
-        int classCompare = a.className.compareTo(b.className);
-        if (classCompare != 0) return classCompare;
-        return a.sectionName.compareTo(b.sectionName);
-      });
 
     return Scaffold(
       appBar: AppBar(
@@ -127,7 +123,7 @@ class _DeleteClassPageState extends State<DeleteClassPage> {
                   ),
                   SizedBox(height: 30),
                   Expanded(
-                    child: classSections.isEmpty
+                    child: classes.isEmpty
                         ? Center(
                             child: Column(
                               mainAxisAlignment: MainAxisAlignment.center,
@@ -149,9 +145,9 @@ class _DeleteClassPageState extends State<DeleteClassPage> {
                             ),
                           )
                         : ListView.builder(
-                            itemCount: classSections.length,
+                            itemCount: classes.length,
                             itemBuilder: (context, index) {
-                              return _buildClassCard(classSections[index]);
+                              return _buildClassCard(classes[index]);
                             },
                           ),
                   ),
@@ -161,7 +157,7 @@ class _DeleteClassPageState extends State<DeleteClassPage> {
     );
   }
 
-  Widget _buildClassCard(SchoolClass classSection) {
+  Widget _buildClassCard(Map<String, dynamic> cls) {
     return Card(
       margin: EdgeInsets.symmetric(vertical: 8),
       elevation: 3,
@@ -181,7 +177,7 @@ class _DeleteClassPageState extends State<DeleteClassPage> {
           ),
         ),
         title: Text(
-          'Class ${classSection.className} - Section ${classSection.sectionName}',
+          'Class ${cls["class_number"]} - Section ${cls["section"]}',
           style: TextStyle(
             fontSize: 18,
             fontWeight: FontWeight.w600,
@@ -200,14 +196,14 @@ class _DeleteClassPageState extends State<DeleteClassPage> {
           ),
           child: IconButton(
             icon: Icon(Icons.delete, color: Colors.white),
-            onPressed: () => _showDeleteDialog(classSection),
+            onPressed: () => _showDeleteDialog(cls),
           ),
         ),
       ),
     );
   }
 
-  void _showDeleteDialog(SchoolClass classSection) {
+  void _showDeleteDialog(Map<String, dynamic> cls) {
     showDialog(
       context: context,
       builder: (BuildContext context) {
@@ -217,7 +213,7 @@ class _DeleteClassPageState extends State<DeleteClassPage> {
             style: TextStyle(color: Colors.red[800]),
           ),
           content: Text(
-            'Are you sure you want to delete Class ${classSection.className} - Section ${classSection.sectionName}?\n\nThis action cannot be undone.',
+            'Are you sure you want to delete Class ${cls["class_number"]} - Section ${cls["section"]}?\n\nThis action cannot be undone.',
           ),
           actions: [
             TextButton(
@@ -232,7 +228,7 @@ class _DeleteClassPageState extends State<DeleteClassPage> {
             ElevatedButton(
               onPressed: () {
                 Navigator.of(context).pop();
-                _deleteClassFromAPI(classSection);
+                _deleteClassFromAPI(cls);
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.red,
